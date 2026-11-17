@@ -35,9 +35,16 @@ path or in a linked image.
 The report's `findings` make non-equivalences explicit:
 
 - `OSGI_PACKAGE_WIRING`: version ranges and uses constraints remain OSGi-only.
+- `OSGI_PACKAGE_EXPORT`: package versions and `uses` are not JPMS exports.
+- `OSGI_REQUIRE_BUNDLE`: bundle version ranges, reexport and identity remain OSGi-only.
+- `OSGI_REQUIRE_CAPABILITY` / `OSGI_PROVIDE_CAPABILITY`: namespaces and filters
+  do not collapse into JPMS `requires` or `provides` declarations.
 - `OSGI_DYNAMIC_IMPORT`: dynamic imports cannot become static JPMS requires.
 - `OSGI_FRAGMENT`: fragment-host attachment must remain an OSGi operation.
 - `OSGI_NATIVE_CODE`: native selection needs OSGi filter/platform handling.
+- `OSGI_BUNDLE_CLASSPATH`: bundle-embedded JARs and classpath ordering are distinct.
+- `OSGI_LAZY_ACTIVATION` / `OSGI_BUNDLE_ACTIVATOR`: preserve OSGi lifecycle.
+- `OSGI_DECLARATIVE_SERVICES`: requires the OSGi Service Component Runtime.
 - `OSGI_JPMS_NAME_DIFFERENCE`: names are kept distinct, never silently renamed.
 - `DUPLICATE_JPMS_MODULE`: one scan contains two paths defining the same JPMS name.
 - `JDK_MODULE_VARIANT`: separate JDK `jmods/` sets contain the same module name;

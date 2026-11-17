@@ -39,6 +39,12 @@ public final class ModuleInventorySelfTest {
             check(artifact.sha256().matches("[0-9a-f]{64}"), "content hash");
             check(ModuleCompatibility.audit(List.of(artifact)).stream()
                     .anyMatch(f -> f.code().equals("OSGI_DYNAMIC_IMPORT")), "dynamic import diagnostic");
+            List<String> osgiOnlyContracts = List.of("OSGI_PACKAGE_EXPORT", "OSGI_REQUIRE_BUNDLE",
+                    "OSGI_REQUIRE_CAPABILITY", "OSGI_PROVIDE_CAPABILITY", "OSGI_BUNDLE_CLASSPATH",
+                    "OSGI_LAZY_ACTIVATION", "OSGI_BUNDLE_ACTIVATOR", "OSGI_DECLARATIVE_SERVICES");
+            check(ModuleCompatibility.audit(List.of(artifact)).stream()
+                    .map(ModuleCompatibility.Finding::code).toList().containsAll(osgiOnlyContracts),
+                    "OSGi resolver, classpath, and lifecycle semantics must remain explicit");
 
             Path automatic = jar(fixture.resolve("automatic.jar"), compiled, true, false);
             ModuleArtifact osgi = ModuleInventory.inspect(automatic);
@@ -179,7 +185,15 @@ public final class ModuleInventorySelfTest {
             attributes.putValue("Bundle-SymbolicName", "com.example.bundle;singleton:=true");
             attributes.putValue("Bundle-Version", "1.2.3");
             attributes.putValue("Import-Package", "com.example.api;version=\"[1.0,2.0)\"");
+            attributes.putValue("Export-Package", "com.example;version=\"1.0.0\"");
+            attributes.putValue("Require-Bundle", "com.example.dependency;bundle-version=\"[1.0,2.0)\"");
+            attributes.putValue("Require-Capability", "osgi.ee;filter:=\"(osgi.ee=JavaSE)\"");
+            attributes.putValue("Provide-Capability", "com.example.capability;flag=true");
             attributes.putValue("DynamicImport-Package", "*");
+            attributes.putValue("Bundle-ClassPath", ".,lib/embedded.jar");
+            attributes.putValue("Bundle-ActivationPolicy", "lazy");
+            attributes.putValue("Bundle-Activator", "com.example.Widget");
+            attributes.putValue("Service-Component", "OSGI-INF/component.xml");
         }
         if (!explicitModule) attributes.putValue("Automatic-Module-Name", "com.example.automatic");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(dest), manifest);
