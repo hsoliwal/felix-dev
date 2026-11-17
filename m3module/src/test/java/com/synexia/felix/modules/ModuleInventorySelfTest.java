@@ -132,6 +132,68 @@ public final class ModuleInventorySelfTest {
                     List.of(ModuleInventory.inspectJdkHome(vendorA)))
                     .contains("Example Vendor A"), "target JDK provenance in JSON");
 
+            // Explicit vendor comparison is additive and never assumes that
+            // different implementations share a runtime module path.
+            var installations = List.of(ModuleInventory.inspectJdkHome(vendorB),
+                    ModuleInventory.inspectJdkHome(vendorA));
+            ModuleArtifact vendorModuleA = ModuleInventory.inspect(aModule);
+            ModuleArtifact vendorModuleB = ModuleInventory.inspect(bModule);
+            check(JdkModuleDiff.compare(List.of(vendorModuleB, vendorModuleA), installations)
+                    .isEmpty(), "identical JMODs have identical comparison evidence");
+
+            var changedDescriptor = java.lang.module.ModuleDescriptor.newModule("com.example.catalog")
+                    .requires("java.logging").exports("com.example").build();
+            ModuleArtifact changedVendorModule = new ModuleArtifact(bModule, ModuleArtifact.Kind.JMOD,
+                    "f".repeat(64), changedDescriptor, java.util.Map.of(), List.of(), List.of());
+            ModuleArtifact unrelatedModule = new ModuleArtifact(
+                    fixture.resolve("other-folder/unrelated.jmod"), ModuleArtifact.Kind.JMOD,
+                    "a".repeat(64), changedDescriptor, java.util.Map.of(), List.of(), List.of());
+            var changes = JdkModuleDiff.compare(
+                    List.of(unrelatedModule, changedVendorModule, vendorModuleA), installations);
+            check(changes.stream().anyMatch(change -> change.aspect().equals("REQUIRES")
+                    && change.module().equals("com.example.catalog")
+                    && change.baselineHome().equals(vendorA.toAbsolutePath())),
+                    "deterministic baseline and requires-surface drift");
+            check(changes.stream().anyMatch(change -> change.aspect().equals("JMOD_SHA256")),
+                    "payload digest drift remains independent from descriptor drift");
+            check(changes.equals(JdkModuleDiff.compare(
+                    List.of(vendorModuleA, changedVendorModule), installations)),
+                    "vendor diff order must not depend on scanned artifact order");
+            check(changes.stream().noneMatch(change -> change.module().equals("unrelated")),
+                    "other JMOD scans must not affect vendor comparisons");
+            ModuleArtifact missingInBaseline = new ModuleArtifact(
+                    vendorB.resolve("jmods/extra.jmod"), ModuleArtifact.Kind.JMOD,
+                    "c".repeat(64), java.lang.module.ModuleDescriptor.newModule("extra.module").build(),
+                    java.util.Map.of(), List.of(), List.of());
+            check(JdkModuleDiff.compare(List.of(vendorModuleA, vendorModuleB, missingInBaseline),
+                    installations).stream().anyMatch(change -> change.aspect().equals("PRESENCE")
+                    && change.module().equals("extra.module") && change.baseline().isEmpty()
+                    && change.candidate().equals(List.of("present"))),
+                    "modules absent from an installation retain their provenance");
+            check(!CatalogJson.render(List.of(vendorModuleA, changedVendorModule), null,
+                    installations).contains("jdkModuleDifferences"),
+                    "legacy JSON has no JDK comparison fields");
+            String compared = CatalogJson.render(List.of(vendorModuleA, changedVendorModule),
+                    null, installations, false, true);
+            check(compared.contains("\"jdkModuleDifferences\"")
+                    && compared.contains("\"REQUIRES\""), "opt-in JMOD diff JSON");
+            check(compared.equals(CatalogJson.render(
+                    List.of(vendorModuleA, changedVendorModule), null, installations, false, true)),
+                    "opt-in JSON is stable for a fixed inventory");
+
+            java.io.ByteArrayOutputStream compareOutput = new java.io.ByteArrayOutputStream();
+            check(ModuleCatalogCli.run(new String[] { "--compare-jdks", "--jdk-home",
+                    vendorB.toString(), "--jdk-home", vendorA.toString() },
+                    new java.io.PrintStream(compareOutput), System.err) == 0,
+                    "read-only JDK vendor comparison CLI");
+            check(compareOutput.toString(java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"jdkModuleDifferences\":[]"),
+                    "equal JMOD descriptors and payloads produce no differences");
+            check(ModuleCatalogCli.run(new String[] { "--compare-jdks", "--jdk-home",
+                    vendorA.toString() }, new java.io.PrintStream(new java.io.ByteArrayOutputStream()),
+                    new java.io.PrintStream(new java.io.ByteArrayOutputStream())) == 2,
+                    "comparison requires two distinct installations");
+
             ModuleArtifact mixedCase = new ModuleArtifact(dual,
                     ModuleArtifact.Kind.OSGI_JAR, artifact.sha256(), null,
                     java.util.Map.of("bundle-symbolicname", "lower.case"), List.of(), List.of());

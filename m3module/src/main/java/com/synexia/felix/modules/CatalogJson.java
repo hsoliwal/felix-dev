@@ -29,6 +29,13 @@ public final class CatalogJson {
     public static String render(List<ModuleArtifact> artifacts, ModuleInventory.RuntimeSnapshot runtime,
                                 List<ModuleInventory.JdkInstallation> installations,
                                 boolean includeCapabilityEvidence) {
+        return render(artifacts, runtime, installations, includeCapabilityEvidence, false);
+    }
+
+    /** Independent opt-in sections do not alter the default v1 JSON contract. */
+    public static String render(List<ModuleArtifact> artifacts, ModuleInventory.RuntimeSnapshot runtime,
+                                List<ModuleInventory.JdkInstallation> installations,
+                                boolean includeCapabilityEvidence, boolean compareJdkModules) {
         Map<String, Object> report = object();
         report.put("schema", "com.synexia.m3module.catalog/v1");
         report.put("runtime", runtime == null ? null : runtime(runtime));
@@ -73,6 +80,19 @@ public final class CatalogJson {
                         entry.put("evidence", signal.evidence());
                         entry.put("module", signal.module());
                         entry.put("origin", signal.origin());
+                        return entry;
+                    }).toList());
+        }
+        if (compareJdkModules) {
+            report.put("jdkModuleDifferences", JdkModuleDiff.compare(artifacts, installations).stream()
+                    .map(change -> {
+                        Map<String, Object> entry = object();
+                        entry.put("module", change.module());
+                        entry.put("baselineHome", change.baselineHome().toString());
+                        entry.put("candidateHome", change.candidateHome().toString());
+                        entry.put("aspect", change.aspect());
+                        entry.put("baseline", change.baseline());
+                        entry.put("candidate", change.candidate());
                         return entry;
                     }).toList());
         }
