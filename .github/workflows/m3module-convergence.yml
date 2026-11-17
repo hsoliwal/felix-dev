@@ -1,0 +1,40 @@
+name: M3 Felix OSGi-JPMS-JMOD compatibility
+
+on:
+  pull_request:
+    paths:
+      - 'm3module/**'
+      - '.github/workflows/m3module-convergence.yml'
+  push:
+    paths:
+      - 'm3module/**'
+      - '.github/workflows/m3module-convergence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  java-21-vendors:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        distribution: [temurin, semeru, corretto, zulu, graalvm-community]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Java 21 (${{ matrix.distribution }})
+        uses: actions/setup-java@v6
+        with:
+          distribution: ${{ matrix.distribution }}
+          java-version: '21'
+          cache: maven
+          cache-dependency-path: m3module/pom.xml
+      - name: Compile and test
+        run: mvn -B -ntp -f m3module/pom.xml verify
+      - name: Exercise the runtime catalog
+        run: |
+          java --module-path m3module/target/m3-felix-module-catalog-0.1.0-SNAPSHOT.jar \
+            --module com.synexia.felix.modules/com.synexia.felix.modules.ModuleCatalogCli \
+            --runtime > m3module/target/runtime-catalog.json
+          python3 -m json.tool m3module/target/runtime-catalog.json > /dev/null
