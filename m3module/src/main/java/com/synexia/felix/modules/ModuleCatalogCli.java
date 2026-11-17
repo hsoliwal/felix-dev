@@ -20,11 +20,13 @@ public final class ModuleCatalogCli {
 
     public static int run(String[] args, PrintStream out, PrintStream err) {
         boolean includeRuntime = false;
+        boolean includeCapabilityEvidence = false;
         List<Path> inputs = new ArrayList<>();
         List<ModuleInventory.JdkInstallation> jdkInstallations = new ArrayList<>();
         for (int i = 0; i < args.length; i++) {
             switch (args[i]) {
                 case "--runtime" -> includeRuntime = true;
+                case "--features" -> includeCapabilityEvidence = true;
                 case "--scan" -> {
                     if (++i >= args.length) return usage(err);
                     inputs.add(Path.of(args[i]));
@@ -43,10 +45,11 @@ public final class ModuleCatalogCli {
                 default -> { return usage(err); }
             }
         }
-        if (!includeRuntime && inputs.isEmpty()) return usage(err);
+        if (!includeRuntime && !includeCapabilityEvidence && inputs.isEmpty()) return usage(err);
         try {
             out.println(CatalogJson.render(ModuleInventory.scan(inputs),
-                    includeRuntime ? ModuleInventory.currentRuntime() : null, jdkInstallations));
+                    includeRuntime || includeCapabilityEvidence ? ModuleInventory.currentRuntime() : null,
+                    jdkInstallations, includeCapabilityEvidence));
             return 0;
         } catch (IOException | IllegalArgumentException ex) {
             err.println("M3 module inventory failed: " + ex.getMessage());
@@ -55,7 +58,7 @@ public final class ModuleCatalogCli {
     }
 
     private static int usage(PrintStream err) {
-        err.println("Usage: ModuleCatalogCli [--runtime] [--scan jar|jmod|directory]... "
+        err.println("Usage: ModuleCatalogCli [--runtime] [--features] [--scan jar|jmod|directory]... "
                 + "[--jdk-home /path/to/jdk]...");
         return 2;
     }

@@ -66,6 +66,16 @@ Both `--scan` and `--jdk-home` may be repeated. The latter reads the target
 JDK's `jmods/` folder without executing it. The single JSON document has schema
 `com.synexia.m3module.catalog/v1` and contains `runtime`, `artifacts`,
 `jdkInstallations` (including target JDK release-file provenance), and `findings`.
+
+Add `--features` to opt in to a deterministic `capabilityEvidence` array for
+documented module-level donor signals (JFR, the Vector incubator, JVMCI, Graal
+compiler module, CRaC module, jlink module, and compiler modules). A signal
+means only that a module descriptor was found in the current runtime or a
+scanned JMOD. **It does not mean the feature is initialized, supported by the
+VM, licensed for copying, or available through an API.** OpenJ9 shared caches,
+GraalVM native-image compilation, and vendor-specific AOT need independent
+providers and actual capability tests; VM branding is never sufficient. The
+default JSON shape is unchanged without this option.
 A non-existent input or a malformed JMOD fails closed; an OSGi JAR
 whose JPMS metadata is invalid remains readable and receives a diagnostic.
 The self-test checks that the runtime `ModuleFinder` rejects JMOD inputs and,

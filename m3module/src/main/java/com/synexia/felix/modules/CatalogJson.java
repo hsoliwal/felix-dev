@@ -22,6 +22,13 @@ public final class CatalogJson {
 
     public static String render(List<ModuleArtifact> artifacts, ModuleInventory.RuntimeSnapshot runtime,
                                 List<ModuleInventory.JdkInstallation> installations) {
+        return render(artifacts, runtime, installations, false);
+    }
+
+    /** Optional capability evidence; the existing v1 JSON shape remains the default. */
+    public static String render(List<ModuleArtifact> artifacts, ModuleInventory.RuntimeSnapshot runtime,
+                                List<ModuleInventory.JdkInstallation> installations,
+                                boolean includeCapabilityEvidence) {
         Map<String, Object> report = object();
         report.put("schema", "com.synexia.m3module.catalog/v1");
         report.put("runtime", runtime == null ? null : runtime(runtime));
@@ -58,6 +65,17 @@ public final class CatalogJson {
             findings.add(entry);
         }
         report.put("findings", findings);
+        if (includeCapabilityEvidence) {
+            report.put("capabilityEvidence", JdkCapabilityEvidence.inspect(runtime, artifacts).stream()
+                    .map(signal -> {
+                        Map<String, Object> entry = object();
+                        entry.put("feature", signal.feature());
+                        entry.put("evidence", signal.evidence());
+                        entry.put("module", signal.module());
+                        entry.put("origin", signal.origin());
+                        return entry;
+                    }).toList());
+        }
         StringBuilder out = new StringBuilder();
         write(out, report);
         return out.toString();

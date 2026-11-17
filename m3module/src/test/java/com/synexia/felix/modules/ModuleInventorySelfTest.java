@@ -149,6 +149,29 @@ public final class ModuleInventorySelfTest {
 
             check(ModuleInventory.currentRuntime().modules().stream()
                     .anyMatch(d -> d.name().equals("java.base")), "system modules");
+
+            // Module evidence is usable across vendors without falsely
+            // inferring OpenJ9, GraalVM, CRaC or other features from a VM name.
+            ModuleInventory.RuntimeSnapshot synthetic = new ModuleInventory.RuntimeSnapshot(
+                    "21", "Any vendor", "OpenJ9 or GraalVM (unverified)", "Linux", "x86_64",
+                    List.of(java.lang.module.ModuleDescriptor.newModule("jdk.jfr").build(),
+                            java.lang.module.ModuleDescriptor.newModule("jdk.crac").build()));
+            List<JdkCapabilityEvidence.Signal> signals =
+                    JdkCapabilityEvidence.inspect(synthetic, List.of());
+            check(signals.stream().anyMatch(s -> s.feature().equals("jdk.crac-module")
+                    && s.evidence().equals("SYSTEM_MODULE_DESCRIPTOR")), "module evidence");
+            check(signals.stream().noneMatch(s -> s.feature().contains("openj9")),
+                    "vendor strings cannot imply unverified runtime capabilities");
+            String extended = CatalogJson.render(List.of(), synthetic, List.of(), true);
+            check(extended.contains("\"capabilityEvidence\""), "opt-in capability output");
+            check(!CatalogJson.render(List.of(), synthetic).contains("\"capabilityEvidence\""),
+                    "legacy JSON contract stays unchanged by default");
+            java.io.ByteArrayOutputStream featureOutput = new java.io.ByteArrayOutputStream();
+            check(ModuleCatalogCli.run(new String[] { "--features" },
+                    new java.io.PrintStream(featureOutput), System.err) == 0,
+                    "opt-in CLI capability mode");
+            check(featureOutput.toString(java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"capabilityEvidence\""), "opt-in CLI report");
             System.out.println("M3 module inventory self-test passed");
         } finally {
             try (var paths = Files.walk(fixture)) {
