@@ -7,6 +7,8 @@ package com.synexia.felix.modules;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.module.FindException;
+import java.lang.module.ModuleFinder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -37,6 +39,12 @@ public final class ModuleInventorySelfTest {
             check(artifact.sha256().matches("[0-9a-f]{64}"), "content hash");
             check(ModuleCompatibility.audit(List.of(artifact)).stream()
                     .anyMatch(f -> f.code().equals("OSGI_DYNAMIC_IMPORT")), "dynamic import diagnostic");
+            List<String> osgiOnlyContracts = List.of("OSGI_PACKAGE_EXPORT", "OSGI_REQUIRE_BUNDLE",
+                    "OSGI_REQUIRE_CAPABILITY", "OSGI_PROVIDE_CAPABILITY", "OSGI_BUNDLE_CLASSPATH",
+                    "OSGI_LAZY_ACTIVATION", "OSGI_BUNDLE_ACTIVATOR", "OSGI_DECLARATIVE_SERVICES");
+            check(ModuleCompatibility.audit(List.of(artifact)).stream()
+                    .map(ModuleCompatibility.Finding::code).toList().containsAll(osgiOnlyContracts),
+                    "OSGi resolver, classpath, and lifecycle semantics must remain explicit");
 
             Path automatic = jar(fixture.resolve("automatic.jar"), compiled, true, false);
             ModuleArtifact osgi = ModuleInventory.inspect(automatic);
@@ -75,6 +83,37 @@ public final class ModuleInventorySelfTest {
             check(linked.jmodNativePaths().contains("lib/libm3bridge.so"),
                     "JMOD native content inventory");
 
+            // JMOD is a compile/link-time container, never a runtime module.
+            try {
+                ModuleFinder.of(jmod).findAll();
+                throw new AssertionError("runtime ModuleFinder must reject JMOD input");
+            } catch (FindException expected) {
+                check(expected.getMessage().contains("JMOD"),
+                        "runtime JMOD rejection must be explicit");
+            }
+
+            Optional<java.util.spi.ToolProvider> jlinkTool = java.util.spi.ToolProvider.findFirst("jlink");
+            Path currentJmods = Path.of(System.getProperty("java.home"), "jmods");
+            if (jlinkTool.isPresent() && Files.isDirectory(currentJmods)) {
+                // Do not place the two same-named JAR fixtures on jlink's module path.
+                Path linkModulePath = Files.createDirectories(fixture.resolve("jmod-input"));
+                Files.copy(jmod, linkModulePath.resolve("catalog.jmod"));
+                Path image = fixture.resolve("linked-image");
+                StringWriter linkErrors = new StringWriter();
+                int linkStatus = jlinkTool.get().run(new PrintWriter(new StringWriter()),
+                        new PrintWriter(linkErrors), "--module-path",
+                        currentJmods + java.io.File.pathSeparator + linkModulePath,
+                        "--add-modules", "com.example.catalog", "--output", image.toString(),
+                        "--no-header-files", "--no-man-pages");
+                check(linkStatus == 0, "JMOD-to-jlink image creation: " + linkErrors);
+                Path imageRelease = image.resolve("release");
+                check(Files.isRegularFile(imageRelease), "jlink image has a release manifest");
+                check(Files.readString(imageRelease).contains("com.example.catalog"),
+                        "jlink image contains the sample module");
+            } else {
+                System.out.println("Skipping jlink image test: this JDK image has no jmods/jlink");
+            }
+
             Path vendorA = fixture.resolve("vendor-a");
             Path vendorB = fixture.resolve("vendor-b");
             Files.createDirectories(vendorA.resolve("jmods"));
@@ -110,6 +149,29 @@ public final class ModuleInventorySelfTest {
 
             check(ModuleInventory.currentRuntime().modules().stream()
                     .anyMatch(d -> d.name().equals("java.base")), "system modules");
+
+            // Module evidence is usable across vendors without falsely
+            // inferring OpenJ9, GraalVM, CRaC or other features from a VM name.
+            ModuleInventory.RuntimeSnapshot synthetic = new ModuleInventory.RuntimeSnapshot(
+                    "21", "Any vendor", "OpenJ9 or GraalVM (unverified)", "Linux", "x86_64",
+                    List.of(java.lang.module.ModuleDescriptor.newModule("jdk.jfr").build(),
+                            java.lang.module.ModuleDescriptor.newModule("jdk.crac").build()));
+            List<JdkCapabilityEvidence.Signal> signals =
+                    JdkCapabilityEvidence.inspect(synthetic, List.of());
+            check(signals.stream().anyMatch(s -> s.feature().equals("jdk.crac-module")
+                    && s.evidence().equals("SYSTEM_MODULE_DESCRIPTOR")), "module evidence");
+            check(signals.stream().noneMatch(s -> s.feature().contains("openj9")),
+                    "vendor strings cannot imply unverified runtime capabilities");
+            String extended = CatalogJson.render(List.of(), synthetic, List.of(), true);
+            check(extended.contains("\"capabilityEvidence\""), "opt-in capability output");
+            check(!CatalogJson.render(List.of(), synthetic).contains("\"capabilityEvidence\""),
+                    "legacy JSON contract stays unchanged by default");
+            java.io.ByteArrayOutputStream featureOutput = new java.io.ByteArrayOutputStream();
+            check(ModuleCatalogCli.run(new String[] { "--features" },
+                    new java.io.PrintStream(featureOutput), System.err) == 0,
+                    "opt-in CLI capability mode");
+            check(featureOutput.toString(java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"capabilityEvidence\""), "opt-in CLI report");
             System.out.println("M3 module inventory self-test passed");
         } finally {
             try (var paths = Files.walk(fixture)) {
@@ -146,7 +208,15 @@ public final class ModuleInventorySelfTest {
             attributes.putValue("Bundle-SymbolicName", "com.example.bundle;singleton:=true");
             attributes.putValue("Bundle-Version", "1.2.3");
             attributes.putValue("Import-Package", "com.example.api;version=\"[1.0,2.0)\"");
+            attributes.putValue("Export-Package", "com.example;version=\"1.0.0\"");
+            attributes.putValue("Require-Bundle", "com.example.dependency;bundle-version=\"[1.0,2.0)\"");
+            attributes.putValue("Require-Capability", "osgi.ee;filter:=\"(osgi.ee=JavaSE)\"");
+            attributes.putValue("Provide-Capability", "com.example.capability;flag=true");
             attributes.putValue("DynamicImport-Package", "*");
+            attributes.putValue("Bundle-ClassPath", ".,lib/embedded.jar");
+            attributes.putValue("Bundle-ActivationPolicy", "lazy");
+            attributes.putValue("Bundle-Activator", "com.example.Widget");
+            attributes.putValue("Service-Component", "OSGI-INF/component.xml");
         }
         if (!explicitModule) attributes.putValue("Automatic-Module-Name", "com.example.automatic");
         try (JarOutputStream output = new JarOutputStream(Files.newOutputStream(dest), manifest);

@@ -35,9 +35,16 @@ path or in a linked image.
 The report's `findings` make non-equivalences explicit:
 
 - `OSGI_PACKAGE_WIRING`: version ranges and uses constraints remain OSGi-only.
+- `OSGI_PACKAGE_EXPORT`: package versions and `uses` are not JPMS exports.
+- `OSGI_REQUIRE_BUNDLE`: bundle version ranges, reexport and identity remain OSGi-only.
+- `OSGI_REQUIRE_CAPABILITY` / `OSGI_PROVIDE_CAPABILITY`: namespaces and filters
+  do not collapse into JPMS `requires` or `provides` declarations.
 - `OSGI_DYNAMIC_IMPORT`: dynamic imports cannot become static JPMS requires.
 - `OSGI_FRAGMENT`: fragment-host attachment must remain an OSGi operation.
 - `OSGI_NATIVE_CODE`: native selection needs OSGi filter/platform handling.
+- `OSGI_BUNDLE_CLASSPATH`: bundle-embedded JARs and classpath ordering are distinct.
+- `OSGI_LAZY_ACTIVATION` / `OSGI_BUNDLE_ACTIVATOR`: preserve OSGi lifecycle.
+- `OSGI_DECLARATIVE_SERVICES`: requires the OSGi Service Component Runtime.
 - `OSGI_JPMS_NAME_DIFFERENCE`: names are kept distinct, never silently renamed.
 - `DUPLICATE_JPMS_MODULE`: one scan contains two paths defining the same JPMS name.
 - `JDK_MODULE_VARIANT`: separate JDK `jmods/` sets contain the same module name;
@@ -59,8 +66,22 @@ Both `--scan` and `--jdk-home` may be repeated. The latter reads the target
 JDK's `jmods/` folder without executing it. The single JSON document has schema
 `com.synexia.m3module.catalog/v1` and contains `runtime`, `artifacts`,
 `jdkInstallations` (including target JDK release-file provenance), and `findings`.
+
+Add `--features` to opt in to a deterministic `capabilityEvidence` array for
+documented module-level donor signals (JFR, the Vector incubator, JVMCI, Graal
+compiler module, CRaC module, jlink module, and compiler modules). A signal
+means only that a module descriptor was found in the current runtime or a
+scanned JMOD. **It does not mean the feature is initialized, supported by the
+VM, licensed for copying, or available through an API.** OpenJ9 shared caches,
+GraalVM native-image compilation, and vendor-specific AOT need independent
+providers and actual capability tests; VM branding is never sufficient. The
+default JSON shape is unchanged without this option.
 A non-existent input or a malformed JMOD fails closed; an OSGi JAR
 whose JPMS metadata is invalid remains readable and receives a diagnostic.
+The self-test checks that the runtime `ModuleFinder` rejects JMOD inputs and,
+when the active JDK ships both `jmods/` and a `jlink` tool provider, produces a
+linked image containing the fixture module. This feature test is skipped with
+an explicit diagnostic on JDK images without the linking inputs.
 
 To run the non-mutating OpenRewrite audit of the module code:
 
@@ -97,3 +118,9 @@ not confer permission to copy implementation source into Apache-licensed code.
 
 This is the **first implementation slice** of the convergence work, not a claim
 that all OSGi and JPMS semantics can be merged losslessly.
+
+The next opt-in slice is implemented in
+[`../m3module-connect`](../m3module-connect): an identity-preserving wrapper
+around the existing Atomos `ModuleConnector`, with read-only preflight evidence,
+optional conflict rejection, and real Felix/Atomos smoke tests. It deliberately
+does not alter either resolver or treat JMODs as runtime bundles.

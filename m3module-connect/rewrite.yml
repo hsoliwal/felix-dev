@@ -1,0 +1,12 @@
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: com.synexia.m3module.AuditConnectDelegation
+displayName: Locate OSGi Connect delegation paths
+description: >-
+  Search-only recipe: find all ModuleConnector and ConnectFrameworkFactory uses
+  before modifying the optional Atomos integration. Do not change call order.
+recipeList:
+  - org.openrewrite.java.search.FindTypes:
+      fullyQualifiedTypeName: org.osgi.framework.connect.ModuleConnector
+  - org.openrewrite.java.search.FindTypes:
+      fullyQualifiedTypeName: org.osgi.framework.connect.ConnectFrameworkFactory

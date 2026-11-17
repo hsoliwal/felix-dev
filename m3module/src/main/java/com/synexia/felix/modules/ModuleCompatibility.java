@@ -44,12 +44,28 @@ public final class ModuleCompatibility {
             }
             requiresOsgi(artifact, "Import-Package", "OSGI_PACKAGE_WIRING", findings,
                     "Package version ranges and uses constraints must remain with the OSGi resolver");
+            requiresOsgi(artifact, "Export-Package", "OSGI_PACKAGE_EXPORT", findings,
+                    "OSGi exported package versions and uses constraints are not JPMS exports");
+            requiresOsgi(artifact, "Require-Bundle", "OSGI_REQUIRE_BUNDLE", findings,
+                    "OSGi bundle identity, reexport and version ranges require OSGi resolution");
+            requiresOsgi(artifact, "Require-Capability", "OSGI_REQUIRE_CAPABILITY", findings,
+                    "OSGi capability namespaces and LDAP filters are not JPMS requires clauses");
+            requiresOsgi(artifact, "Provide-Capability", "OSGI_PROVIDE_CAPABILITY", findings,
+                    "General OSGi capabilities cannot be reduced to JPMS service providers");
             requiresOsgi(artifact, "DynamicImport-Package", "OSGI_DYNAMIC_IMPORT", findings,
                     "JPMS does not provide OSGi dynamic import semantics");
             requiresOsgi(artifact, "Fragment-Host", "OSGI_FRAGMENT", findings,
                     "Fragments require OSGi host attachment semantics");
             requiresOsgi(artifact, "Bundle-NativeCode", "OSGI_NATIVE_CODE", findings,
                     "Native selection must obey OSGi environment filters and target platform");
+            requiresOsgi(artifact, "Bundle-ClassPath", "OSGI_BUNDLE_CLASSPATH", findings,
+                    "Embedded JAR entries and bundle classpath ordering are not JPMS module paths");
+            requiresOsgi(artifact, "Bundle-ActivationPolicy", "OSGI_LAZY_ACTIVATION", findings,
+                    "OSGi deferred activation is an OSGi lifecycle contract");
+            requiresOsgi(artifact, "Bundle-Activator", "OSGI_BUNDLE_ACTIVATOR", findings,
+                    "An OSGi BundleActivator is not a JPMS module initializer");
+            requiresOsgi(artifact, "Service-Component", "OSGI_DECLARATIVE_SERVICES", findings,
+                    "Declarative Services requires an OSGi Service Component Runtime");
         }
         findings.sort(Comparator.comparing((Finding f) -> f.path().toString())
                 .thenComparing(Finding::code).thenComparing(Finding::detail));
