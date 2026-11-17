@@ -7,6 +7,8 @@ on:
       - 'm3module-connect/**'
       - '.github/workflows/m3module-convergence.yml'
   push:
+    branches:
+      - master
     paths:
       - 'm3module/**'
       - 'm3module-connect/**'
