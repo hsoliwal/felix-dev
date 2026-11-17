@@ -162,6 +162,18 @@ public final class ModuleInventorySelfTest {
                     && s.evidence().equals("SYSTEM_MODULE_DESCRIPTOR")), "module evidence");
             check(signals.stream().noneMatch(s -> s.feature().contains("openj9")),
                     "vendor strings cannot imply unverified runtime capabilities");
+            ModuleArtifact donorJmod = new ModuleArtifact(
+                    fixture.resolve("vendor-c/jmods/jdk.crac.jmod"), ModuleArtifact.Kind.JMOD,
+                    "0".repeat(64), java.lang.module.ModuleDescriptor.newModule("jdk.crac").build(),
+                    java.util.Map.of(), List.of(), List.of());
+            List<JdkCapabilityEvidence.Signal> combinedSignals =
+                    JdkCapabilityEvidence.inspect(synthetic, List.of(donorJmod));
+            check(combinedSignals.stream().anyMatch(s -> s.feature().equals("jdk.crac-module")
+                    && s.evidence().equals("JMOD_DESCRIPTOR")
+                    && s.origin().endsWith("vendor-c/jmods/jdk.crac.jmod")),
+                    "a separate JDK provides independent JMOD provenance");
+            check(combinedSignals.equals(JdkCapabilityEvidence.inspect(synthetic, List.of(donorJmod))),
+                    "capability evidence has stable deterministic ordering");
             String extended = CatalogJson.render(List.of(), synthetic, List.of(), true);
             check(extended.contains("\"capabilityEvidence\""), "opt-in capability output");
             check(!CatalogJson.render(List.of(), synthetic).contains("\"capabilityEvidence\""),
