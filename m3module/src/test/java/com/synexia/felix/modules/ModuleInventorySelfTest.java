@@ -189,6 +189,35 @@ public final class ModuleInventorySelfTest {
             check(compareOutput.toString(java.nio.charset.StandardCharsets.UTF_8)
                     .contains("\"jdkModuleDifferences\":[]"),
                     "equal JMOD descriptors and payloads produce no differences");
+
+            // Build a second *real* JMOD: its extra JPMS requires directive
+            // must survive archive parsing and the public CLI comparison path.
+            Path vendorVariant = fixture.resolve("vendor-variant");
+            Files.createDirectories(vendorVariant.resolve("jmods"));
+            Path variantClasses = compileModule(fixture.resolve("variant-module"), true);
+            Path variantJmod = vendorVariant.resolve("jmods/catalog.jmod");
+            StringWriter variantErrors = new StringWriter();
+            int variantStatus = jmodTool.get().run(new PrintWriter(new StringWriter()),
+                    new PrintWriter(variantErrors), "create", "--class-path",
+                    variantClasses.toString(), "--libs", nativeDirectory.toString(),
+                    variantJmod.toString());
+            check(variantStatus == 0, "variant JMOD creation: " + variantErrors);
+            ModuleArtifact actualVariant = ModuleInventory.inspect(variantJmod);
+            var actualDifferences = JdkModuleDiff.compare(List.of(actualVariant, vendorModuleA),
+                    List.of(ModuleInventory.inspectJdkHome(vendorVariant),
+                            ModuleInventory.inspectJdkHome(vendorA)));
+            check(actualDifferences.stream().anyMatch(change -> change.aspect().equals("REQUIRES")
+                    && change.candidate().stream().anyMatch(value -> value.contains("java.logging"))),
+                    "different real JMOD descriptors must produce requires differences");
+            check(actualDifferences.stream().anyMatch(change -> change.aspect().equals("JMOD_SHA256")),
+                    "different real JMOD contents must produce hash differences");
+            java.io.ByteArrayOutputStream variantOutput = new java.io.ByteArrayOutputStream();
+            check(ModuleCatalogCli.run(new String[] { "--compare-jdks", "--jdk-home",
+                    vendorVariant.toString(), "--jdk-home", vendorA.toString() },
+                    new java.io.PrintStream(variantOutput), System.err) == 0,
+                    "CLI must compare actual JMOD descriptor variants");
+            check(variantOutput.toString(java.nio.charset.StandardCharsets.UTF_8)
+                    .contains("\"REQUIRES\""), "CLI includes real descriptor drift");
             check(ModuleCatalogCli.run(new String[] { "--compare-jdks", "--jdk-home",
                     vendorA.toString() }, new java.io.PrintStream(new java.io.ByteArrayOutputStream()),
                     new java.io.PrintStream(new java.io.ByteArrayOutputStream())) == 2,
@@ -257,13 +286,18 @@ public final class ModuleInventorySelfTest {
     }
 
     private static Path compileModule(Path root) throws IOException {
+        return compileModule(root, false);
+    }
+
+    private static Path compileModule(Path root, boolean requireLogging) throws IOException {
         Path sources = root.resolve("sources");
         Path compiled = root.resolve("compiled");
         Files.createDirectories(sources.resolve("com/example"));
         Files.createDirectories(compiled);
         Path module = sources.resolve("module-info.java");
         Path sample = sources.resolve("com/example/Widget.java");
-        Files.writeString(module, "module com.example.catalog { exports com.example; }");
+        Files.writeString(module, "module com.example.catalog { "
+                + (requireLogging ? "requires java.logging; " : "") + "exports com.example; }");
         Files.writeString(sample, "package com.example; public class Widget { }");
         JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
         check(compiler != null, "A full JDK, not a JRE, is required");
