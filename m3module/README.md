@@ -76,6 +76,29 @@ VM, licensed for copying, or available through an API.** OpenJ9 shared caches,
 GraalVM native-image compilation, and vendor-specific AOT need independent
 providers and actual capability tests; VM branding is never sufficient. The
 default JSON shape is unchanged without this option.
+
+To compare *actual JMOD evidence* from multiple JDK implementations, use:
+
+```bash
+java --module-path m3module/target/m3-felix-module-catalog-0.1.0-SNAPSHOT.jar \
+  --module com.synexia.felix.modules/com.synexia.felix.modules.ModuleCatalogCli \
+  --compare-jdks --jdk-home /path/to/temurin-21 --jdk-home /path/to/semeru-21
+```
+
+The opt-in `jdkModuleDifferences` array compares each JDK against the
+lexicographically first canonical JDK home, independently of command-line
+argument order. It checks module presence, declared version, open-module and
+other modifiers, main class, JPMS `requires` (including modifiers and compiled
+versions), qualified `exports` and `opens`, `uses`, `provides`, packages, and
+whole-JMOD SHA-256. The comparison only includes JMODs directly under the
+provided JDK homes; unrelated `--scan` artifacts are excluded. A difference
+reports *evidence*, not binary incompatibility or permission to replace
+OSGi resolution. Different hashes alone may reflect vendor implementation or
+packaging details even when module descriptors agree. This mode requires two
+distinct `--jdk-home` arguments and does not change the existing v1 JSON
+shape when omitted. It is covered by the same search-only OpenRewrite recipe,
+`com.synexia.m3module.AuditModuleConnect`, and Java 21 vendor CI matrix.
+
 A non-existent input or a malformed JMOD fails closed; an OSGi JAR
 whose JPMS metadata is invalid remains readable and receives a diagnostic.
 The self-test checks that the runtime `ModuleFinder` rejects JMOD inputs and,
