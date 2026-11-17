@@ -61,6 +61,10 @@ JDK's `jmods/` folder without executing it. The single JSON document has schema
 `jdkInstallations` (including target JDK release-file provenance), and `findings`.
 A non-existent input or a malformed JMOD fails closed; an OSGi JAR
 whose JPMS metadata is invalid remains readable and receives a diagnostic.
+The self-test checks that the runtime `ModuleFinder` rejects JMOD inputs and,
+when the active JDK ships both `jmods/` and a `jlink` tool provider, produces a
+linked image containing the fixture module. This feature test is skipped with
+an explicit diagnostic on JDK images without the linking inputs.
 
 To run the non-mutating OpenRewrite audit of the module code:
 

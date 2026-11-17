@@ -7,6 +7,8 @@ package com.synexia.felix.modules;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.io.StringWriter;
+import java.lang.module.FindException;
+import java.lang.module.ModuleFinder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Comparator;
@@ -74,6 +76,37 @@ public final class ModuleInventorySelfTest {
             check(linked.jpmsName().orElseThrow().equals("com.example.catalog"), "JMOD descriptor");
             check(linked.jmodNativePaths().contains("lib/libm3bridge.so"),
                     "JMOD native content inventory");
+
+            // JMOD is a compile/link-time container, never a runtime module.
+            try {
+                ModuleFinder.of(jmod).findAll();
+                throw new AssertionError("runtime ModuleFinder must reject JMOD input");
+            } catch (FindException expected) {
+                check(expected.getMessage().contains("JMOD"),
+                        "runtime JMOD rejection must be explicit");
+            }
+
+            Optional<java.util.spi.ToolProvider> jlinkTool = java.util.spi.ToolProvider.findFirst("jlink");
+            Path currentJmods = Path.of(System.getProperty("java.home"), "jmods");
+            if (jlinkTool.isPresent() && Files.isDirectory(currentJmods)) {
+                // Do not place the two same-named JAR fixtures on jlink's module path.
+                Path linkModulePath = Files.createDirectories(fixture.resolve("jmod-input"));
+                Files.copy(jmod, linkModulePath.resolve("catalog.jmod"));
+                Path image = fixture.resolve("linked-image");
+                StringWriter linkErrors = new StringWriter();
+                int linkStatus = jlinkTool.get().run(new PrintWriter(new StringWriter()),
+                        new PrintWriter(linkErrors), "--module-path",
+                        currentJmods + java.io.File.pathSeparator + linkModulePath,
+                        "--add-modules", "com.example.catalog", "--output", image.toString(),
+                        "--no-header-files", "--no-man-pages");
+                check(linkStatus == 0, "JMOD-to-jlink image creation: " + linkErrors);
+                Path imageRelease = image.resolve("release");
+                check(Files.isRegularFile(imageRelease), "jlink image has a release manifest");
+                check(Files.readString(imageRelease).contains("com.example.catalog"),
+                        "jlink image contains the sample module");
+            } else {
+                System.out.println("Skipping jlink image test: this JDK image has no jmods/jlink");
+            }
 
             Path vendorA = fixture.resolve("vendor-a");
             Path vendorB = fixture.resolve("vendor-b");
