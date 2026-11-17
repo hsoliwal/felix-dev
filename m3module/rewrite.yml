@@ -1,0 +1,14 @@
+---
+type: specs.openrewrite.org/v1beta/recipe
+name: com.synexia.m3module.AuditModuleConnect
+displayName: Locate OSGi Connect integration points
+description: >-
+  Search-only, non-mutating recipe to identify ModuleConnector references before
+  any Felix/Atomos refactor. Preserve OSGi and JPMS contracts separately.
+recipeList:
+  - org.openrewrite.java.search.FindTypes:
+      fullyQualifiedTypeName: org.osgi.framework.connect.ModuleConnector
+  - org.openrewrite.java.search.FindTypes:
+      fullyQualifiedTypeName: java.lang.module.ModuleFinder
+  - org.openrewrite.java.search.FindTypes:
+      fullyQualifiedTypeName: java.lang.module.ModuleDescriptor
