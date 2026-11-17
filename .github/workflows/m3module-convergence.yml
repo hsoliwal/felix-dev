@@ -4,10 +4,12 @@ on:
   pull_request:
     paths:
       - 'm3module/**'
+      - 'm3module-connect/**'
       - '.github/workflows/m3module-convergence.yml'
   push:
     paths:
       - 'm3module/**'
+      - 'm3module-connect/**'
       - '.github/workflows/m3module-convergence.yml'
   workflow_dispatch:
 
@@ -29,9 +31,13 @@ jobs:
           distribution: ${{ matrix.distribution }}
           java-version: '21'
           cache: maven
-          cache-dependency-path: m3module/pom.xml
-      - name: Compile and test
-        run: mvn -B -ntp -f m3module/pom.xml verify
+          cache-dependency-path: |
+            m3module/pom.xml
+            m3module-connect/pom.xml
+      - name: Install M3 module catalog and run its tests
+        run: mvn -B -ntp -f m3module/pom.xml clean install
+      - name: Compile and test the Felix Atomos preflight
+        run: mvn -B -ntp -f m3module-connect/pom.xml verify
       - name: Exercise the runtime catalog
         run: |
           java --module-path m3module/target/m3-felix-module-catalog-0.1.0-SNAPSHOT.jar \

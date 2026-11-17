@@ -97,3 +97,9 @@ not confer permission to copy implementation source into Apache-licensed code.
 
 This is the **first implementation slice** of the convergence work, not a claim
 that all OSGi and JPMS semantics can be merged losslessly.
+
+The next opt-in slice is implemented in
+[`../m3module-connect`](../m3module-connect): an identity-preserving wrapper
+around the existing Atomos `ModuleConnector`, with read-only preflight evidence,
+optional conflict rejection, and real Felix/Atomos smoke tests. It deliberately
+does not alter either resolver or treat JMODs as runtime bundles.
