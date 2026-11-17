@@ -248,9 +248,13 @@ jobs:
         for module in annotation api core generalchecks webconsoleplugin; do
           mvn -B -V -Dstyle.color=always --file healthcheck/$module/pom.xml clean verify || exit 1
         done
+    # fileinstall still inherits felix-parent 6, which binds ianal-maven-plugin
+    # 1.0-alpha-1. That plugin fails on JDK 17+ ("module java.base does not opens
+    # java.io"), so the 'verify' phase cannot run here. Stick to 'test' until the
+    # module is moved to a newer parent.
     - name: Felix File Install
       if: steps.changes.outputs.fileinstall == 'true'
-      run: mvn -B -V -Dstyle.color=always --file fileinstall/pom.xml clean verify
+      run: mvn -B -V -Dstyle.color=always --file fileinstall/pom.xml clean test
     - name: Felix Inventory
       if: steps.changes.outputs.inventory == 'true'
       run: mvn -B -V -Dstyle.color=always --file inventory/pom.xml clean verify
@@ -285,7 +289,7 @@ jobs:
       run: mvn -B -V -Dstyle.color=always --file dependencymanager/pom.xml clean verify "-Dframework.version=$FRAMEWORK_VERSION" "-Dconfigadmin.version=$CONFIGADMIN_VERSION" "-Dgogo.runtime.version=$GOGO_RUNTIME_VERSION" "-Dgogo.shell.version=$GOGO_SHELL_VERSION" "-Dgogo.command.version=$GOGO_COMMAND_VERSION"
     - name: Upload Test Results
       if: always()
-      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
         name: test-results-jdk${{ matrix.java }}
         if-no-files-found: warn
@@ -294,4 +298,3 @@ jobs:
           ${{ github.workspace }}/**/target/failsafe-reports/*.xml
           ${{ github.workspace }}/**/target/test-reports/tck/*.xml
           ${{ github.workspace }}/dependencymanager/**/target/test-reports/test/*.xml
-
